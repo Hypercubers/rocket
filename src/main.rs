@@ -1,9 +1,14 @@
+use clap::Parser;
 use cubesim::{parse_scramble, Cube, FaceletCube, Move, MoveVariant, PruningTable, Solver};
 use lazy_static::lazy_static;
-use std::{fmt, io::Write};
+use std::collections::HashSet;
+use std::fmt;
+use std::io::Write;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering::SeqCst};
 
-// minimum of 2
-const PRUNING_TABLE_DEPTH: i32 = 4;
+static PRUNING_TABLE_DEPTH: AtomicI32 = AtomicI32::new(0);
+static STICKER_NOTATION: AtomicBool = AtomicBool::new(false);
+static CHEAP_MOVES: AtomicU32 = AtomicU32::new(0);
 
 lazy_static! {
     static ref NAIVE_SOLVER: Solver = make_naive_solver();
@@ -26,16 +31,54 @@ fn make_naive_solver() -> Solver {
         .map(|r| FaceletCube::new(3).apply_moves(r.equivalent_rkt_moves()))
         .collect();
 
-    let pruning_table = PruningTable::new(&initial_states, PRUNING_TABLE_DEPTH, &move_set);
+    let pruning_table =
+        PruningTable::new(&initial_states, PRUNING_TABLE_DEPTH.load(SeqCst), &move_set);
 
     Solver::new(move_set, pruning_table)
 }
 
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+pub struct Args {
+    /// Depth of pruning table (must be at least 2).
+    #[clap(short, long, default_value_t = 2)]
+    depth: u8,
+
+    /// Use sticker notation instead of XYZ notation for reorientations.
+    #[clap(short, long)]
+    stickers: bool,
+
+    /// Output all STM-optimal algorithms instead of just the ETM-optimal
+    /// subset.
+    #[clap(short, long)]
+    all: bool,
+
+    /// List of reorientations that should be considered 1 ETM. 90-degree
+    /// rotations need not be included.
+    #[clap(short, long)]
+    cheap_moves: Vec<String>,
+}
+
 fn main() {
-    println!(
-        "Initializing pruning table to depth {} ...",
-        PRUNING_TABLE_DEPTH
-    );
+    let args = Args::parse();
+
+    let cheap_move_set: HashSet<_> = args
+        .cheap_moves
+        .into_iter()
+        .map(|s| format!(" O{} ", s))
+        .collect();
+    let mut cheap_move_set_mask = 0;
+    for (i, r) in Reorient::ALL.iter().enumerate() {
+        if cheap_move_set.contains(&r.to_string()) {
+            cheap_move_set_mask |= 1 << i;
+        }
+    }
+    CHEAP_MOVES.store(cheap_move_set_mask, SeqCst);
+
+    PRUNING_TABLE_DEPTH.store(args.depth as i32, SeqCst);
+    STICKER_NOTATION.store(args.stickers, SeqCst);
+
+    println!("Initializing pruning table to depth {} ...", args.depth);
 
     let _ = &*NAIVE_SOLVER;
 
@@ -55,19 +98,20 @@ fn main() {
             }
             _ => (),
         }
-        println!();
 
         let alg = parse_scramble(alg_string);
 
         let (reorient_count, mut solutions) = iddfs(&alg);
         let solution_count = solutions.len();
         let stm = alg.len() + reorient_count;
-        let min_cost = *solutions.iter().map(|(cost, _string)| cost).min().unwrap();
-        solutions.retain(|(cost, _string)| *cost == min_cost);
-        let good_solution_count = solutions.len();
         println!("Found {solution_count} solutions with {reorient_count} reorients ({stm} STM).");
-        println!("{good_solution_count} of them add only {min_cost} ETM:");
-        for (cost, string) in solutions {
+        if !args.all {
+            let min_cost = *solutions.iter().map(|(cost, _string)| cost).min().unwrap();
+            solutions.retain(|(cost, _string)| *cost == min_cost);
+            let good_solution_count = solutions.len();
+            println!("{good_solution_count} of them add only {min_cost} ETM.");
+        }
+        for (_cost, string) in solutions {
             println!("{}", string);
         }
         println!();
@@ -159,67 +203,70 @@ pub type Solution = Vec<Reorient>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Reorient {
-    None,
+    None = 0,
 
-    R,
-    L,
-    U,
-    D,
-    F,
-    B,
+    R = 1,
+    L = 2,
+    U = 3,
+    D = 4,
+    F = 5,
+    B = 6,
 
-    R2,
-    U2,
-    F2,
+    R2 = 7,
+    U2 = 8,
+    F2 = 9,
 
-    UF,
-    UR,
-    FR,
-    DF,
-    UL,
-    BR,
+    UF = 10,
+    UR = 11,
+    FR = 12,
+    DF = 13,
+    UL = 14,
+    BR = 15,
 
-    UFR,
-    DBL,
-    UFL,
-    DBR,
-    DFR,
-    UBL,
-    UBR,
-    DFL,
+    UFR = 16,
+    DBL = 17,
+    UFL = 18,
+    DBR = 19,
+    DFR = 20,
+    UBL = 21,
+    UBR = 22,
+    DFL = 23,
 }
 impl fmt::Display for Reorient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Reorient::*;
+
+        let s = STICKER_NOTATION.load(SeqCst);
+
         match self {
             None => write!(f, " "),
 
-            R => write!(f, " Ox "),
-            L => write!(f, " Ox' "),
-            U => write!(f, " Oy "),
-            D => write!(f, " Oy' "),
-            F => write!(f, " Oz "),
-            B => write!(f, " Oz' "),
+            R => write!(f, " {} ", if s { "23I:L" } else { "Ox" }),
+            L => write!(f, " {} ", if s { "23I:R" } else { "Ox'" }),
+            U => write!(f, " {} ", if s { "23I:D" } else { "Oy" }),
+            D => write!(f, " {} ", if s { "23I:U" } else { "Oy'" }),
+            F => write!(f, " {} ", if s { "23I:B" } else { "Oz" }),
+            B => write!(f, " {} ", if s { "23I:F" } else { "Oz'" }),
 
-            R2 => write!(f, " Ox2 "),
-            U2 => write!(f, " Oy2 "),
-            F2 => write!(f, " Oz2 "),
+            R2 => write!(f, " {} ", if s { "23I:R2" } else { "Ox2" }),
+            U2 => write!(f, " {} ", if s { "23I:U2" } else { "Oy2" }),
+            F2 => write!(f, " {} ", if s { "23I:F2" } else { "Oz2" }),
 
-            UF => write!(f, " Oxy2 "),
-            UR => write!(f, " Ozx2 "),
-            FR => write!(f, " Oyz2 "),
-            DF => write!(f, " Oxz2 "),
-            UL => write!(f, " Ozy2 "),
-            BR => write!(f, " Oyx2 "),
+            UF => write!(f, " {} ", if s { "23I:UF" } else { "Oxy2" }),
+            UR => write!(f, " {} ", if s { "23I:UR" } else { "Ozx2" }),
+            FR => write!(f, " {} ", if s { "23I:FR" } else { "Oyz2" }),
+            DF => write!(f, " {} ", if s { "23I:DF" } else { "Oxz2" }),
+            UL => write!(f, " {} ", if s { "23I:UL" } else { "Ozy2" }),
+            BR => write!(f, " {} ", if s { "23I:BR" } else { "Oyx2" }),
 
-            UFR => write!(f, " Oxy "),
-            DBL => write!(f, " Oy'x' "),
-            UFL => write!(f, " Ozy "),
-            DBR => write!(f, " Oxy' "), // (equivalent: z'x)
-            DFR => write!(f, " Oxz "),
-            UBL => write!(f, " Oyz' "), // (equivalent: z'y)
-            UBR => write!(f, " Oyx "),
-            DFL => write!(f, " Ozx' "), // (equivalent: y'z)
+            UFR => write!(f, " {} ", if s { "23I:DBL" } else { "Oxy" }),
+            DBL => write!(f, " {} ", if s { "23I:UFR" } else { "Oy'x'" }),
+            UFL => write!(f, " {} ", if s { "23I:DBR" } else { "Ozy" }),
+            DBR => write!(f, " {} ", if s { "23I:UFL" } else { "Oxy'" }),
+            DFR => write!(f, " {} ", if s { "23I:UBL" } else { "Oxz" }),
+            UBL => write!(f, " {} ", if s { "23I:DFR" } else { "Oyz'" }),
+            UBR => write!(f, " {} ", if s { "23I:DFL" } else { "Oyx" }),
+            DFL => write!(f, " {} ", if s { "23I:UBR" } else { "Ozx'" }),
         }
     }
 }
@@ -253,6 +300,10 @@ impl Reorient {
 
     pub fn cost(self) -> usize {
         use Reorient::*;
+
+        if (CHEAP_MOVES.load(SeqCst) >> self as u32) & 1 != 0 && self != Self::None {
+            return 1;
+        }
 
         match self {
             None => 0,

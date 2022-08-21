@@ -1,10 +1,12 @@
 [package]
 name = "rocket"
+description = "Search program for adapting 3D Rubik's cube algorithms to 4D efficiently via RKT"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { version = "3.2.17", features = ["derive"] }
 cubesim = "0.0.7"
 lazy_static = "1.4.0"
