@@ -57,6 +57,10 @@ pub struct Args {
     /// rotations need not be included.
     #[clap(short, long)]
     cheap_moves: Vec<String>,
+
+    /// Maximum depth to search.
+    #[clap(short, long, default_value_t = 3)]
+    max_depth: usize,
 }
 
 fn main() {
@@ -101,24 +105,30 @@ fn main() {
 
         let alg = parse_scramble(alg_string);
 
-        let (reorient_count, mut solutions) = iddfs(&alg);
+        let (reorient_count, mut solutions) = iddfs(&alg, args.max_depth);
         let solution_count = solutions.len();
-        let stm = alg.len() + reorient_count;
-        println!("Found {solution_count} solutions with {reorient_count} reorients ({stm} STM).");
-        if !args.all {
-            let min_cost = *solutions.iter().map(|(cost, _string)| cost).min().unwrap();
-            solutions.retain(|(cost, _string)| *cost == min_cost);
-            let good_solution_count = solutions.len();
-            println!("{good_solution_count} of them add only {min_cost} ETM.");
-        }
-        for (_cost, string) in solutions {
-            println!("{}", string);
+        if solution_count == 0 {
+            println!("No solutions?");
+        } else {
+            let stm = alg.len() + reorient_count;
+            println!(
+                "Found {solution_count} solutions with {reorient_count} reorients ({stm} STM)."
+            );
+            if !args.all {
+                let min_cost = *solutions.iter().map(|(cost, _string)| cost).min().unwrap();
+                solutions.retain(|(cost, _string)| *cost == min_cost);
+                let good_solution_count = solutions.len();
+                println!("{good_solution_count} of them add only {min_cost} ETM.");
+            }
+            for (_cost, string) in solutions {
+                println!("{}", string);
+            }
         }
         println!();
     }
 }
 
-fn iddfs(moves: &[Move]) -> (usize, Vec<(usize, String)>) {
+fn iddfs(moves: &[Move], max_depth: usize) -> (usize, Vec<(usize, String)>) {
     if moves.len() <= 1 {
         return (
             0,
@@ -129,7 +139,7 @@ fn iddfs(moves: &[Move]) -> (usize, Vec<(usize, String)>) {
         );
     }
 
-    for max_reorients in 0..moves.len() {
+    for max_reorients in 0..std::cmp::min(moves.len(), max_depth + 1) {
         println!("Searching solutions with {} reorients", max_reorients);
         let ret = dfs(&FaceletCube::new(3), moves, max_reorients);
         if !ret.is_empty() {
@@ -154,7 +164,7 @@ fn iddfs(moves: &[Move]) -> (usize, Vec<(usize, String)>) {
         }
     }
 
-    panic!("no solution!")
+    (0, vec![])
 }
 
 fn dfs(state: &FaceletCube, moves: &[Move], max_reorients: usize) -> Vec<Solution> {
