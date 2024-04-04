@@ -1,11 +1,10 @@
-use clap::Parser;
 use cubesim::{parse_scramble, Cube, FaceletCube, Move, MoveVariant, PruningTable, Solver};
+use eframe::egui;
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::fmt;
-use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering::SeqCst};
-
+use std::sync::{Arc, Mutex};
 static PRUNING_TABLE_DEPTH: AtomicI32 = AtomicI32::new(0);
 static STICKER_NOTATION: AtomicBool = AtomicBool::new(false);
 static CHEAP_MOVES: AtomicU32 = AtomicU32::new(0);
@@ -37,98 +36,118 @@ fn make_naive_solver() -> Solver {
     Solver::new(move_set, pruning_table)
 }
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-pub struct Args {
-    /// Depth of pruning table (must be at least 2).
-    #[clap(short, long, default_value_t = 2)]
-    depth: u8,
+fn main() -> eframe::Result<()> {
+    let native_options = eframe::NativeOptions {
+        follow_system_theme: false,
+        ..Default::default()
+    };
+    eframe::run_native(
+        "RocKeT",
+        native_options,
+        Box::new(|cc| Box::new(App::new(cc))),
+    )
+}
 
-    /// Use sticker notation instead of XYZ notation for reorientations.
-    #[clap(short, long)]
-    stickers: bool,
-
-    /// Output all STM-optimal algorithms instead of just the ETM-optimal
-    /// subset.
-    #[clap(short, long)]
-    all: bool,
-
-    /// List of reorientations that should be considered 1 ETM. 90-degree
-    /// rotations need not be included.
-    #[clap(short, long)]
-    cheap_moves: Vec<String>,
-
-    /// Maximum depth to search.
-    #[clap(short, long, default_value_t = 3)]
+struct App {
+    alg: String,
+    cheap_moves: String,
     max_depth: usize,
+    all: bool,
+    output: Arc<Mutex<String>>,
 }
-
-fn main() {
-    let args = Args::parse();
-
-    let cheap_move_set: HashSet<_> = args
-        .cheap_moves
-        .into_iter()
-        .map(|s| format!(" O{} ", s))
-        .collect();
-    let mut cheap_move_set_mask = 0;
-    for (i, r) in Reorient::ALL.iter().enumerate() {
-        if cheap_move_set.contains(&r.to_string()) {
-            cheap_move_set_mask |= 1 << i;
+impl App {
+    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        PRUNING_TABLE_DEPTH.store(2 as i32, SeqCst);
+        let _ = &*NAIVE_SOLVER;
+        Self {
+            alg: String::new(),
+            cheap_moves: String::new(),
+            max_depth: 5,
+            all: false,
+            output: Arc::new(Mutex::new("".to_string())),
         }
     }
-    CHEAP_MOVES.store(cheap_move_set_mask, SeqCst);
+}
+impl eframe::App for App {
+    fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Alg: ");
+                egui::TextEdit::singleline(&mut self.alg)
+                    .hint_text("eg. R U2 R2 U' R2 U' R2 U2 R ...")
+                    .show(ui);
+            });
+            ui.horizontal(|ui| {
+                ui.label("Cheap moves: ");
+                egui::TextEdit::singleline(&mut self.cheap_moves)
+                    .hint_text("eg. xy2 xz2 y2 ...")
+                    .show(ui);
+            });
+            ui.horizontal(|ui| {
+                let label = ui.label("Max depth: ");
+                ui.add(egui::Slider::new(&mut self.max_depth, 0..=10))
+                    .labelled_by(label.id);
+            });
+            ui.checkbox(&mut self.all, "Show all algs");
+            if ui.button("Run").clicked() {
+                let alg = parse_scramble(self.alg.clone());
+                let cheap_move_set: HashSet<_> = self
+                    .cheap_moves
+                    .split_ascii_whitespace()
+                    .map(|s| format!(" O{} ", s))
+                    .collect();
+                let mut cheap_move_set_mask = 0;
+                for (i, r) in Reorient::ALL.iter().enumerate() {
+                    if cheap_move_set.contains(&r.to_string()) {
+                        cheap_move_set_mask |= 1 << i;
+                    }
+                }
+                CHEAP_MOVES.store(cheap_move_set_mask, SeqCst);
+                *self.output.lock().unwrap() = String::new();
 
-    PRUNING_TABLE_DEPTH.store(args.depth as i32, SeqCst);
-    STICKER_NOTATION.store(args.stickers, SeqCst);
-
-    println!("Initializing pruning table to depth {} ...", args.depth);
-
-    let _ = &*NAIVE_SOLVER;
-
-    println!("Ready!");
-    println!();
-
-    loop {
-        let mut alg_string = String::new();
-
-        print!("Enter rotationless algorithm: ");
-        std::io::stdout().flush().unwrap();
-        match std::io::stdin().read_line(&mut alg_string) {
-            Ok(0) => std::process::exit(0),
-            Err(e) => {
-                eprintln!("{}", e);
-                std::process::exit(1)
+                // let output = Arc::new(Mutex::new(String::new()));
+                let output_ref = Arc::clone(&self.output);
+                let max_depth = self.max_depth;
+                let all = self.all;
+                std::thread::spawn(move || {
+                    let (reorient_count, mut solutions) = iddfs(&alg, max_depth, &output_ref);
+                    let mut output = output_ref.lock().unwrap();
+                    let solution_count = solutions.len();
+                    if solution_count == 0 {
+                        *output += "No solutions?\n";
+                    } else {
+                        let stm = alg.len() + reorient_count;
+                        *output += &format!(
+                            "Found {solution_count} solutions with \
+                        {reorient_count} reorients ({stm} STM).\n"
+                        );
+                        if !all {
+                            let min_cost =
+                                *solutions.iter().map(|(cost, _string)| cost).min().unwrap();
+                            solutions.retain(|(cost, _string)| *cost == min_cost);
+                            let good_solution_count = solutions.len();
+                            *output += &format!(
+                                "{good_solution_count} of them add only {min_cost} ETM.\n"
+                            );
+                        }
+                        for (_cost, string) in solutions {
+                            *output += &format!("{}\n", string);
+                        }
+                    }
+                });
             }
-            _ => (),
-        }
-
-        let alg = parse_scramble(alg_string);
-
-        let (reorient_count, mut solutions) = iddfs(&alg, args.max_depth);
-        let solution_count = solutions.len();
-        if solution_count == 0 {
-            println!("No solutions?");
-        } else {
-            let stm = alg.len() + reorient_count;
-            println!(
-                "Found {solution_count} solutions with {reorient_count} reorients ({stm} STM)."
-            );
-            if !args.all {
-                let min_cost = *solutions.iter().map(|(cost, _string)| cost).min().unwrap();
-                solutions.retain(|(cost, _string)| *cost == min_cost);
-                let good_solution_count = solutions.len();
-                println!("{good_solution_count} of them add only {min_cost} ETM.");
-            }
-            for (_cost, string) in solutions {
-                println!("{}", string);
-            }
-        }
-        println!();
+            egui::scroll_area::ScrollArea::vertical()
+                .show(ui, |ui| ui.label(self.output.lock().unwrap().to_string()));
+        });
+        ctx.request_repaint();
     }
 }
 
-fn iddfs(moves: &[Move], max_depth: usize) -> (usize, Vec<(usize, String)>) {
+fn iddfs(
+    moves: &[Move],
+    max_depth: usize,
+    output: &Arc<Mutex<String>>,
+) -> (usize, Vec<(usize, String)>) {
     if moves.len() <= 1 {
         return (
             0,
@@ -140,7 +159,8 @@ fn iddfs(moves: &[Move], max_depth: usize) -> (usize, Vec<(usize, String)>) {
     }
 
     for max_reorients in 0..std::cmp::min(moves.len(), max_depth + 1) {
-        println!("Searching solutions with {} reorients", max_reorients);
+        *output.lock().unwrap() +=
+            &format!("Searching solutions with {} reorients\n", max_reorients);
         let ret = dfs(&FaceletCube::new(3), moves, max_reorients);
         if !ret.is_empty() {
             let solutions = ret
