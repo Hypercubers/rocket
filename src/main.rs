@@ -174,7 +174,7 @@ fn iddfs(
                         .map(|&r| if let Some(r) = r { r.cost() } else { 0 })
                         .sum();
 
-                    (cost, return_string)
+                    (cost, return_string.trim().to_string())
                 })
                 .collect();
             return (max_reorients, solutions);
@@ -296,34 +296,34 @@ impl fmt::Display for Reorient {
         let s = STICKER_NOTATION.load(SeqCst);
 
         match self {
-            None => write!(f, " "),
+            None => write!(f, ""),
 
-            R => write!(f, " {} ", if s { "23I:L" } else { "Ox" }),
-            L => write!(f, " {} ", if s { "23I:R" } else { "Ox'" }),
-            U => write!(f, " {} ", if s { "23I:D" } else { "Oy" }),
-            D => write!(f, " {} ", if s { "23I:U" } else { "Oy'" }),
-            F => write!(f, " {} ", if s { "23I:B" } else { "Oz" }),
-            B => write!(f, " {} ", if s { "23I:F" } else { "Oz'" }),
+            R => write!(f, "{} ", if s { "23I:L" } else { "Ox" }),
+            L => write!(f, "{} ", if s { "23I:R" } else { "Ox'" }),
+            U => write!(f, "{} ", if s { "23I:D" } else { "Oy" }),
+            D => write!(f, "{} ", if s { "23I:U" } else { "Oy'" }),
+            F => write!(f, "{} ", if s { "23I:B" } else { "Oz" }),
+            B => write!(f, "{} ", if s { "23I:F" } else { "Oz'" }),
 
-            R2 => write!(f, " {} ", if s { "23I:R2" } else { "Ox2" }),
-            U2 => write!(f, " {} ", if s { "23I:U2" } else { "Oy2" }),
-            F2 => write!(f, " {} ", if s { "23I:F2" } else { "Oz2" }),
+            R2 => write!(f, "{} ", if s { "23I:R2" } else { "Ox2" }),
+            U2 => write!(f, "{} ", if s { "23I:U2" } else { "Oy2" }),
+            F2 => write!(f, "{} ", if s { "23I:F2" } else { "Oz2" }),
 
-            UF => write!(f, " {} ", if s { "23I:UF" } else { "Oxy2" }),
-            UR => write!(f, " {} ", if s { "23I:UR" } else { "Ozx2" }),
-            FR => write!(f, " {} ", if s { "23I:FR" } else { "Oyz2" }),
-            DF => write!(f, " {} ", if s { "23I:DF" } else { "Oxz2" }),
-            UL => write!(f, " {} ", if s { "23I:UL" } else { "Ozy2" }),
-            BR => write!(f, " {} ", if s { "23I:BR" } else { "Oyx2" }),
+            UF => write!(f, "{} ", if s { "23I:UF" } else { "Oxy2" }),
+            UR => write!(f, "{} ", if s { "23I:UR" } else { "Ozx2" }),
+            FR => write!(f, "{} ", if s { "23I:FR" } else { "Oyz2" }),
+            DF => write!(f, "{} ", if s { "23I:DF" } else { "Oxz2" }),
+            UL => write!(f, "{} ", if s { "23I:UL" } else { "Ozy2" }),
+            BR => write!(f, "{} ", if s { "23I:BR" } else { "Oyx2" }),
 
-            UFR => write!(f, " {} ", if s { "23I:DBL" } else { "Oxy" }),
-            DBL => write!(f, " {} ", if s { "23I:UFR" } else { "Oy'x'" }),
-            UFL => write!(f, " {} ", if s { "23I:DBR" } else { "Ozy" }),
-            DBR => write!(f, " {} ", if s { "23I:UFL" } else { "Oxy'" }),
-            DFR => write!(f, " {} ", if s { "23I:UBL" } else { "Oxz" }),
-            UBL => write!(f, " {} ", if s { "23I:DFR" } else { "Oyz'" }),
-            UBR => write!(f, " {} ", if s { "23I:DFL" } else { "Oyx" }),
-            DFL => write!(f, " {} ", if s { "23I:UBR" } else { "Ozx'" }),
+            UFR => write!(f, "{} ", if s { "23I:DBL" } else { "Oxy" }),
+            DBL => write!(f, "{} ", if s { "23I:UFR" } else { "Oy'x'" }),
+            UFL => write!(f, "{} ", if s { "23I:DBR" } else { "Ozy" }),
+            DBR => write!(f, "{} ", if s { "23I:UFL" } else { "Oxy'" }),
+            DFR => write!(f, "{} ", if s { "23I:UBL" } else { "Oxz" }),
+            UBL => write!(f, "{} ", if s { "23I:DFR" } else { "Oyz'" }),
+            UBR => write!(f, "{} ", if s { "23I:DFL" } else { "Oyx" }),
+            DFL => write!(f, "{} ", if s { "23I:UBR" } else { "Ozx'" }),
         }
     }
 }

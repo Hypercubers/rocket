@@ -173,12 +173,12 @@ impl From<crate::Reorient> for Orientation {
         Orientation {
             bits: match value {
                 crate::Reorient::None => 0b0_000_00_01,
-                crate::Reorient::R => 0b0_010_00_10,
-                crate::Reorient::L => 0b0_001_00_10,
-                crate::Reorient::U => 0b0_001_10_01,
-                crate::Reorient::D => 0b0_100_10_01,
-                crate::Reorient::F => 0b0_100_10_00,
-                crate::Reorient::B => 0b0_010_10_00,
+                crate::Reorient::R => 0b0_001_00_10,
+                crate::Reorient::L => 0b0_010_00_10,
+                crate::Reorient::U => 0b0_100_10_01,
+                crate::Reorient::D => 0b0_001_10_01,
+                crate::Reorient::F => 0b0_010_01_00,
+                crate::Reorient::B => 0b0_100_01_00,
                 crate::Reorient::R2 => 0b0_011_00_01,
                 crate::Reorient::U2 => 0b0_101_00_01,
                 crate::Reorient::F2 => 0b0_110_00_01,
@@ -188,14 +188,14 @@ impl From<crate::Reorient> for Orientation {
                 crate::Reorient::DF => 0b0_111_00_10,
                 crate::Reorient::UL => 0b0_111_01_00,
                 crate::Reorient::BR => 0b0_111_10_01,
-                crate::Reorient::UFR => 0b0_000_10_00,
-                crate::Reorient::DBL => 0b0_000_01_10,
-                crate::Reorient::UFL => 0b0_101_01_10,
-                crate::Reorient::DBR => 0b0_101_10_00,
-                crate::Reorient::DFR => 0b0_110_01_10,
-                crate::Reorient::UBL => 0b0_110_10_00,
-                crate::Reorient::UBR => 0b0_011_01_10,
-                crate::Reorient::DFL => 0b0_011_10_00,
+                crate::Reorient::UFR => 0b0_000_01_10,
+                crate::Reorient::DBL => 0b0_000_10_00,
+                crate::Reorient::UFL => 0b0_101_10_00,
+                crate::Reorient::DBR => 0b0_101_01_10,
+                crate::Reorient::DFR => 0b0_110_10_00,
+                crate::Reorient::UBL => 0b0_110_01_10,
+                crate::Reorient::UBR => 0b0_011_10_00,
+                crate::Reorient::DFL => 0b0_011_01_10,
             },
         }
     }
@@ -274,14 +274,14 @@ pub fn display_move(m: Move) -> String {
     let (p, n) = (p.to_owned(), n.to_owned());
     (match m.positive() {
         TurnMultiple::None => String::new(),
-        TurnMultiple::Cw => p,
-        TurnMultiple::Half => p + "2",
-        TurnMultiple::Ccw => p + "'",
+        TurnMultiple::Cw => p + " ",
+        TurnMultiple::Half => p + "2 ",
+        TurnMultiple::Ccw => p + "' ",
     } + &match m.negative() {
         TurnMultiple::None => String::new(),
-        TurnMultiple::Cw => n,
-        TurnMultiple::Half => n + "2",
-        TurnMultiple::Ccw => n + "'",
+        TurnMultiple::Cw => n + " ",
+        TurnMultiple::Half => n + "2 ",
+        TurnMultiple::Ccw => n + "' ",
     })
 }
 
