@@ -65,11 +65,11 @@ impl eframe::App for App {
                         let cheap_move_set: HashSet<_> = self
                             .cheap_moves
                             .split_ascii_whitespace()
-                            .map(|s| format!(" O{} ", s))
+                            .map(|s| format!("O{}", s))
                             .collect();
                         let mut cheap_move_set_mask = 0;
                         for (i, r) in Reorient::ALL.iter().enumerate() {
-                            if cheap_move_set.contains(&r.to_string()) {
+                            if cheap_move_set.contains(r.to_string().trim()) {
                                 cheap_move_set_mask |= 1 << i;
                             }
                         }
